@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PlanFlow</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --glass-bg: rgba(255, 255, 255, 0.45);
+    --glass-border: rgba(255, 255, 255, 0.6);
+    --glass-highlight: rgba(255, 255, 255, 0.8);
+    --text-main: #1a1a1a;
+    --text-muted: #666;
+  }
+
+  /* ── 핵심 수정: 흔들림 방지 ── */
+  html {
+    overflow-y: scroll; /* 스크롤바 항상 표시 → width 변화 없음 */
+  }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+  }
+
+  .blob {
+    position: fixed; /* fixed로 변경 → 스크롤해도 배경 고정 */
+    filter: blur(60px);
+    z-index: 0;
+    opacity: 0.7;
+    animation: liquidFloat 10s infinite alternate ease-in-out;
+    pointer-events: none;
+  }
+  .blob-1 { width: 500px; height: 500px; background: linear-gradient(135deg, #A664F5, #FF9EAA); top: -100px; left: -100px; border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%; }
+  .blob-2 { width: 600px; height: 600px; background: linear-gradient(135deg, #00D0A0, #2d9cdb); bottom: -150px; right: -100px; border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; animation-delay: -3s; }
+  .blob-3 { width: 400px; height: 400px; background: linear-gradient(135deg, #FFD700, #FF9EAA); top: 30%; left: 40%; border-radius: 50% 50% 30% 70% / 50% 50% 70% 30%; animation-duration: 12s; }
+
+  @keyframes liquidFloat {
+    0%   { transform: translate(0, 0) scale(1) rotate(0deg); }
+    50%  { transform: translate(30px, -50px) scale(1.05) rotate(10deg); }
+    100% { transform: translate(-20px, 30px) scale(0.95) rotate(-10deg); }
+  }
+
+  /* ── APP ── */
+  .app {
+    border-radius: 32px;
+    width: 820px;
+    height: 600px;
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+    background: var(--glass-bg);
+    backdrop-filter: blur(28px) saturate(130%);
+    -webkit-backdrop-filter: blur(28px) saturate(130%);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 24px 48px rgba(0,0,0,0.1), inset 0 1px 1px var(--glass-highlight);
+    /* 가운데 고정 */
+    margin: 40px auto;
+    flex-shrink: 0;
+  }
+
+  .view-container {
+    width: 100%; height: 100%; position: absolute; top: 0; left: 0;
+    transition: transform 0.5s cubic-bezier(0.25, 1, 0.3, 1), opacity 0.5s;
+    display: flex;
+  }
+  .view-hidden-left  { transform: translateX(-100%); opacity: 0; pointer-events: none; }
+  .view-hidden-right { transform: translateX(100%);  opacity: 0; pointer-events: none; }
+  .view-active       { transform: translateX(0);     opacity: 1; pointer-events: auto; }
+
+  /* ── SUB HEADER ── */
+  .sub-header {
+    display: flex; align-items: center; padding: 24px 28px;
+    border-bottom: 1px solid rgba(255,255,255,0.4);
+    width: 100%; position: absolute; top: 0; left: 0;
+    background: rgba(255,255,255,0.2); z-index: 10;
+  }
+  .btn-back {
+    background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.7);
+    border-radius: 14px; width: 44px; height: 44px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    color: var(--text-main); transition: all 0.2s; margin-right: 16px;
+  }
+  .btn-back:hover { background: rgba(255,255,255,1); transform: scale(1.1); }
+  .sub-header h2 { font-size: 18px; font-weight: 800; }
+
+  /* ── LEFT PANEL ── */
+  .left-panel {
+    width: 380px; padding: 32px 28px;
+    border-right: 1px solid rgba(255,255,255,0.4);
+    flex-shrink: 0; display: flex; flex-direction: column;
+  }
+  .profile { display: flex; align-items: center; gap: 14px; margin-bottom: 36px; }
+  .avatar {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: #a8e063; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 12px rgba(168,224,99,0.3); font-size: 24px; flex-shrink: 0;
+  }
+  .profile-info { flex: 1; overflow: hidden; }
+  .profile-info .name { font-size: 16px; font-weight: 800; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .profile-info .bio  { font-size: 13px; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .profile-setting {
+    background: rgba(255,255,255,0.3); border: 1px solid rgba(255,255,255,0.6);
+    border-radius: 50%; width: 36px; height: 36px; flex-shrink: 0;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    color: var(--text-main); transition: all 0.3s ease;
+  }
+  .profile-setting:hover { background: rgba(255,255,255,0.7); transform: rotate(90deg); }
+
+  .cal-header { display: flex; align-items: center; margin-bottom: 20px; }
+  .cal-title  { font-size: 18px; font-weight: 800; flex: 1; }
+  .cal-nav    { display: flex; gap: 6px; }
+  .cal-nav button {
+    background: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.5);
+    border-radius: 10px; width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; cursor: pointer; transition: all 0.2s;
+  }
+  .cal-nav button:hover { background: rgba(255,255,255,0.8); }
+
+  .cal-weekdays { display: grid; grid-template-columns: repeat(7,1fr); margin-bottom: 10px; }
+  .cal-weekdays span { text-align: center; font-size: 12px; font-weight: 700; color: var(--text-muted); }
+  .cal-weekdays span.sat { color: #2d9cdb; }
+  .cal-weekdays span.sun { color: #ff4757; }
+
+  .cal-days { display: grid; grid-template-columns: repeat(7,1fr); gap: 6px 0; }
+  .cal-day { display: flex; flex-direction: column; align-items: center; min-height: 52px; }
+  .cal-day.empty { visibility: hidden; }
+
+  .day-stamp-wrapper {
+    width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; margin-bottom: 4px;
+    background: rgba(255,255,255,0.3); border-radius: 50%; border: 1px solid rgba(255,255,255,0.7);
+  }
+  .clover-fill {
+    width: 17px; height: 17px;
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2C9 2 7 4 7 7C4 7 2 9 2 12C2 15 4 17 7 17C7 20 9 22 12 22C15 22 17 20 17 17C20 17 22 15 22 12C22 9 20 7 17 7C17 4 15 2 12 2Z'/%3E%3C/svg%3E");
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2C9 2 7 4 7 7C4 7 2 9 2 12C2 15 4 17 7 17C7 20 9 22 12 22C15 22 17 20 17 17C20 17 22 15 22 12C22 9 20 7 17 7C17 4 15 2 12 2Z'/%3E%3C/svg%3E");
+    mask-size: cover; -webkit-mask-size: cover;
+    background: rgba(0,0,0,0.1); transition: background 0.3s ease;
+  }
+  .day-num-wrapper { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .day-num-wrapper.today { background: #1a1a1a; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+  .day-num { font-size: 11px; font-weight: 800; color: var(--text-main); }
+  .day-num-wrapper.today .day-num { color: #fff; }
+  .cal-day.sat .day-num { color: #2d9cdb; }
+  .cal-day.sun .day-num { color: #ff4757; }
+  .cal-day.sat .day-num-wrapper.today .day-num,
+  .cal-day.sun .day-num-wrapper.today .day-num { color: #fff; }
+
+  /* ── RIGHT PANEL ── */
+  .right-panel {
+    flex: 1; padding: 28px 24px;
+    display: flex; flex-direction: column;
+    overflow-y: auto;
+  }
+  .right-panel::-webkit-scrollbar { width: 4px; }
+  .right-panel::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
+
+  .create-group-btn {
+    width: 100%; padding: 16px; margin-bottom: 24px;
+    background: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.8);
+    border-radius: 20px; cursor: pointer; font-size: 15px; font-weight: 800;
+    color: var(--text-main); display: flex; align-items: center; justify-content: center;
+    gap: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); transition: all 0.2s;
+    font-family: 'Nunito', sans-serif;
+  }
+  .create-group-btn:hover { background: rgba(255,255,255,0.95); transform: translateY(-2px); }
+
+  .empty-state { text-align: center; color: var(--text-muted); margin-top: 80px; font-weight: 700; opacity: 0.7; }
+
+  .group-container { margin-bottom: 22px; animation: popIn 0.35s ease; }
+  .group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .group-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 10px 8px 16px; border-radius: 30px;
+    background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.8);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+  }
+  .group-pill-name { font-size: 15px; font-weight: 800; cursor: pointer; }
+  .group-pill-add {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: #fff; border: none; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    color: var(--text-main); transition: transform 0.2s;
+  }
+  .group-pill-add:hover { transform: scale(1.15); }
+  .group-delete-btn {
+    width: 30px; height: 30px; border-radius: 50%; color: #ff4757;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; opacity: 0; transition: 0.2s;
+    background: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.6);
+  }
+  .group-container:hover .group-delete-btn { opacity: 1; }
+  .group-delete-btn:hover { background: #ff4757; color: #fff; }
+
+  .todo-list { display: flex; flex-direction: column; gap: 6px; }
+  .todo-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 6px 10px; border-radius: 12px; cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+  }
+  .todo-item:hover { background: rgba(255,255,255,0.4); transform: translateX(3px); }
+  .todo-clover {
+    width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+    background: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.6);
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.3s;
+  }
+  .todo-item.done .todo-clover { background: #2ecc71; border-color: #2ecc71; box-shadow: 0 2px 8px rgba(46,204,113,0.4); }
+  .todo-text { font-size: 14px; font-weight: 700; color: var(--text-main); flex: 1; }
+  .todo-item.done .todo-text { color: #aaa; text-decoration: line-through; }
+  .todo-del-btn {
+    opacity: 0; background: none; border: none; cursor: pointer;
+    font-size: 13px; color: #ff4757; padding: 2px 6px; transition: opacity 0.2s;
+  }
+  .todo-item:hover .todo-del-btn { opacity: 1; }
+
+  .todo-inline-input-row { display: flex; align-items: center; gap: 12px; padding: 4px 10px; }
+  .todo-clover-ph { width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,0.06); flex-shrink: 0; }
+  .todo-inline-input {
+    flex: 1; border: none; background: transparent; padding: 8px 0;
+    font-size: 14px; font-weight: 700; font-family: 'Nunito', sans-serif;
+    color: var(--text-main); outline: none; border-bottom: 2px solid #ddd;
+  }
+
+  /* ── FORMS ── */
+  .form-container {
+    padding: 90px 32px 32px; width: 100%;
+    display: flex; flex-direction: column;
+    overflow-y: auto; height: 100%;
+  }
+  .form-label { font-weight: 800; margin-bottom: 8px; font-size: 14px; display: block; color: var(--text-main); }
+  .glass-input {
+    width: 100%; padding: 14px 18px; border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.8); background: rgba(255,255,255,0.5);
+    font-size: 15px; font-weight: 600; font-family: 'Nunito', sans-serif;
+    color: var(--text-main); outline: none; margin-bottom: 20px; transition: all 0.2s;
+  }
+  .glass-input:focus { background: rgba(255,255,255,0.8); box-shadow: 0 0 0 3px rgba(255,255,255,0.5); }
+  .glass-textarea {
+    width: 100%; height: 180px; padding: 14px 18px; border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.8); background: rgba(255,255,255,0.5);
+    font-size: 15px; font-weight: 600; font-family: 'Nunito', sans-serif;
+    color: var(--text-main); outline: none; resize: none; margin-bottom: 20px; transition: all 0.2s;
+  }
+  .glass-textarea:focus { background: rgba(255,255,255,0.8); }
+
+  .btn-submit {
+    width: 100%; padding: 15px; border-radius: 14px; font-size: 16px; font-weight: 800;
+    font-family: 'Nunito', sans-serif; background: #1a1a1a; color: #fff;
+    border: none; cursor: pointer; transition: all 0.2s; margin-top: 4px;
+  }
+  .btn-submit:hover { background: #333; transform: translateY(-2px); }
+
+  .icon-picker, .color-picker { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+  .icon-btn {
+    width: 42px; height: 42px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; border: 2px solid transparent;
+    background: rgba(255,255,255,0.4); font-size: 20px; transition: all 0.2s;
+  }
+  .icon-btn.selected { border-color: #A8E063; background: #fff; transform: scale(1.1); }
+  .color-btn {
+    width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+    border: 3px solid transparent; transition: all 0.2s;
+  }
+  .color-btn.selected { border-color: #fff; transform: scale(1.2); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+
+  /* ── MODALS ── */
+  .modal-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.2); backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: center; z-index: 200;
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal-content {
+    background: rgba(255,255,255,0.88); border-radius: 24px;
+    padding: 28px 24px; width: 320px; text-align: center;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+  }
+  .modal-title { font-size: 17px; font-weight: 800; margin-bottom: 8px; }
+  .modal-desc  { font-size: 14px; color: #666; margin-bottom: 24px; font-weight: 600; }
+  .modal-actions { display: flex; gap: 10px; }
+  .btn-cancel {
+    flex: 1; padding: 12px; border-radius: 12px; border: none;
+    background: rgba(0,0,0,0.06); color: var(--text-main);
+    font-weight: 700; font-family: 'Nunito', sans-serif; cursor: pointer;
+  }
+  .btn-danger {
+    flex: 1; padding: 12px; border-radius: 12px; border: none;
+    background: #ff4757; color: #fff; font-weight: 700;
+    font-family: 'Nunito', sans-serif; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(255,71,87,0.3);
+  }
+
+  /* ── SETTINGS ── */
+  .setting-item {
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(255,255,255,0.4); padding: 16px 20px;
+    border-radius: 16px; margin-bottom: 12px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.6); transition: background 0.2s;
+  }
+  .setting-item:hover { background: rgba(255,255,255,0.7); }
+  .setting-label { font-size: 14px; font-weight: 700; color: var(--text-muted); }
+  .setting-value { font-size: 14px; font-weight: 800; color: var(--text-main); }
+
+  /* ── LOADING ── */
+  .loading-spinner {
+    width: 20px; height: 20px; border: 3px solid rgba(0,0,0,0.1);
+    border-top-color: #1a1a1a; border-radius: 50%;
+    animation: spin 0.7s linear infinite; margin: 0 auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-state { display: flex; align-items: center; justify-content: center; padding: 40px; }
+
+  @keyframes popIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+</style>
+</head>
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+
+<div class="app">
+
+  <!-- ════ MAIN VIEW ════ -->
+  <div id="main-view" class="view-container view-active">
+    <div class="left-panel">
+      <div class="profile">
+        <div class="avatar">🌿</div>
+        <div class="profile-info">
+          <div class="name" id="main-profile-name">Guest</div>
+          <div class="bio"  id="main-profile-bio">자기소개를 입력하세요</div>
+        </div>
+        <button class="profile-setting" onclick="switchView('profile-view')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="cal-header">
+        <span class="cal-title" id="cal-title"></span>
+        <div class="cal-nav">
+          <button id="prev-month">‹</button>
+          <button id="next-month">›</button>
+        </div>
+      </div>
+      <div class="cal-weekdays">
+        <span>월</span><span>화</span><span>수</span><span>목</span><span>금</span>
+        <span class="sat">토</span><span class="sun">일</span>
+      </div>
+      <div class="cal-days" id="cal-days"></div>
+    </div>
+
+    <div class="right-panel">
+      <button class="create-group-btn" onclick="switchView('create-group-view')">
+        + 새 습관 만들기
+      </button>
+      <div id="group-list-container"></div>
+    </div>
+  </div>
+
+  <!-- ════ CREATE HABIT VIEW ════ -->
+  <div id="create-group-view" class="view-container view-hidden-right">
+    <div class="sub-header">
+      <button class="btn-back" onclick="switchView('main-view')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+      <h2>새 습관 만들기</h2>
+    </div>
+    <div class="form-container">
+      <label class="form-label">습관 이름</label>
+      <input type="text" id="cg-name" class="glass-input" placeholder="매일 운동하기, 독서하기...">
+      <label class="form-label">아이콘</label>
+      <div class="icon-picker" id="icon-picker"></div>
+      <label class="form-label">색상</label>
+      <div class="color-picker" id="color-picker"></div>
+      <button class="btn-submit" onclick="submitCreateGroup()">✨ 습관 만들기</button>
+    </div>
+  </div>
+
+  <!-- ════ EDIT HABIT VIEW ════ -->
+  <div id="edit-group-view" class="view-container view-hidden-right">
+    <div class="sub-header">
+      <button class="btn-back" onclick="switchView('main-view')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+      <h2>습관 정보 수정</h2>
+    </div>
+    <div class="form-container">
+      <label class="form-label">습관 이름</label>
+      <input type="text" id="eg-name" class="glass-input">
+      <label class="form-label">아이콘</label>
+      <div class="icon-picker" id="eg-icon-picker"></div>
+      <label class="form-label">색상</label>
+      <div class="color-picker" id="eg-color-picker"></div>
+      <button class="btn-submit" onclick="submitEditGroup()">💾 저장하기</button>
+    </div>
+  </div>
+
+  <!-- ════ TASK DETAIL VIEW ════ -->
+  <div id="task-detail-view" class="view-container view-hidden-right">
+    <div class="sub-header">
+      <button class="btn-back" onclick="switchView('main-view')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+      <h2>할 일 상세</h2>
+    </div>
+    <div class="form-container">
+      <div id="td-group-name" style="font-size:12px;font-weight:800;opacity:0.5;margin-bottom:4px;"></div>
+      <div id="td-title" style="font-size:22px;font-weight:800;margin-bottom:24px;"></div>
+      <label class="form-label">메모</label>
+      <textarea id="td-memo" class="glass-textarea" placeholder="메모를 입력하세요..."></textarea>
+      <button class="btn-submit" onclick="saveTaskMemo()">저장하기</button>
+    </div>
+  </div>
+
+  <!-- ════ PROFILE VIEW ════ -->
+  <div id="profile-view" class="view-container view-hidden-right">
+    <div class="sub-header">
+      <button class="btn-back" onclick="switchView('main-view')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+      <h2>프로필</h2>
+    </div>
+    <div class="form-container" style="align-items:center;">
+      <div class="avatar" style="width:90px;height:90px;font-size:44px;margin-bottom:28px;">🌿</div>
+      <div style="width:100%;">
+        <div class="setting-item" onclick="openProfileModal('name')">
+          <span class="setting-label">이름</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="setting-value" id="p-name-val">Guest</span>
+            <span style="color:#aaa;">›</span>
+          </div>
+        </div>
+        <div class="setting-item" onclick="openProfileModal('bio')">
+          <span class="setting-label">자기소개</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="setting-value" id="p-bio-val">자기소개를 입력하세요</span>
+            <span style="color:#aaa;">›</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ MODALS ════ -->
+  <div id="delete-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-title">습관 삭제</div>
+      <div class="modal-desc">정말 이 습관을 삭제하시겠습니까?<br>관련 할 일도 모두 삭제됩니다.</div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeModal('delete-modal')">취소</button>
+        <button class="btn-danger" onclick="executeDeleteGroup()">삭제</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="profile-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-title" style="margin-bottom:16px;">정보 수정</div>
+      <input type="text" id="profile-edit-input" class="glass-input">
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeModal('profile-modal')">취소</button>
+        <button class="btn-submit" style="flex:1;margin-top:0;padding:12px;" onclick="saveProfile()">저장</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.app -->
+
+<script>
+// ════════════════════════════════════
+//  상수 & 상태
+// ════════════════════════════════════
+const API = '/api';
+const icons  = ['📌','📚','💪','💧','💊','🏃','💻','🧘','🍎','💰'];
+const colors = ['#A664F5','#00D0A0','#FF9EAA','#2d9cdb','#FFD700','#FF8A65','#4CAF50','#E91E63'];
+const checkSVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+
+let groups = [];
+let selectedIcon = icons[0], selectedColor = colors[0];
+let editIcon = icons[0],     editColor = colors[0];
+let currentEditHabitId = null;
+let currentEditTaskIds = { gid: null, tid: null };
+let currentProfileType = '';
+let habitToDelete = null;
+
+const now = new Date();
+let curY = now.getFullYear(), curM = now.getMonth();
+
+// ════════════════════════════════════
+//  API 헬퍼
+// ════════════════════════════════════
+async function apiFetch(path, method = 'GET', body = null) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API + path, opts);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+function getCookie(name) {
+  return document.cookie.split(';')
+    .map(c => c.trim()).find(c => c.startsWith(name + '='))
+    ?.split('=')[1] ?? '';
+}
+
+// ════════════════════════════════════
+//  데이터 로드 (페이지 최초)
+// ════════════════════════════════════
+async function loadAll() {
+  try {
+    const data = await apiFetch('/groups/');
+    // [{id, name, icon, color, todos:[{id,text,done,memo},...]}]
+    groups = data;
+  } catch (e) {
+    console.warn('API 연결 실패, 로컬 모드로 동작합니다.', e);
+    groups = [];
+  }
+  renderMainList();
+  renderCalendar();
+}
+
+// ════════════════════════════════════
+//  뷰 전환
+// ════════════════════════════════════
+function switchView(viewId) {
+  const views = ['main-view','create-group-view','profile-view','edit-group-view','task-detail-view'];
+  views.forEach(id => {
+    const el = document.getElementById(id);
+    if (id === viewId)             el.className = 'view-container view-active';
+    else if (viewId === 'main-view') el.className = 'view-container view-hidden-right';
+    else                             el.className = 'view-container view-hidden-left';
+  });
+}
+
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+// ════════════════════════════════════
+//  렌더링
+// ════════════════════════════════════
+function renderMainList() {
+  const container = document.getElementById('group-list-container');
+  if (groups.length === 0) {
+    container.innerHTML = `<div class="empty-state">새로운 습관을 추가해보세요!</div>`;
+    return;
+  }
+  container.innerHTML = groups.map(g => `
+    <div class="group-container">
+      <div class="group-header">
+        <div class="group-pill" style="color:${g.color}">
+          <span class="group-pill-name" onclick="openEditHabit(${g.id})">${g.icon} ${g.name}</span>
+          <button class="group-pill-add" onclick="toggleInput(${g.id})">+</button>
+        </div>
+        <button class="group-delete-btn" onclick="confirmDelete(${g.id})">✕</button>
+      </div>
+      <div class="todo-list" id="todo-list-${g.id}">
+        ${g.todos.map(t => renderTodoItem(g, t)).join('')}
+        ${g.showInput ? renderInlineInput(g) : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderTodoItem(g, t) {
+  return `
+    <div class="todo-item ${t.done ? 'done' : ''}" data-gid="${g.id}" data-tid="${t.id}">
+      <div class="todo-clover" onclick="event.stopPropagation(); toggleTodo(${g.id},${t.id})">
+        ${t.done ? checkSVG : ''}
+      </div>
+      <div class="todo-text" onclick="openTaskDetail(${g.id},${t.id})">${t.text}</div>
+      <button class="todo-del-btn" onclick="event.stopPropagation(); deleteTodo(${g.id},${t.id})">✕</button>
+    </div>`;
+}
+
+function renderInlineInput(g) {
+  return `
+    <div class="todo-inline-input-row">
+      <div class="todo-clover-ph"></div>
+      <input type="text" class="todo-inline-input" id="input-${g.id}"
+             onkeypress="addTodo(event,${g.id})"
+             onblur="handleInputBlur(${g.id})"
+             placeholder="할 일 입력..."
+             style="border-bottom-color:${g.color}">
+    </div>`;
+}
+
+// ════════════════════════════════════
+//  그룹(습관) CRUD
+// ════════════════════════════════════
+async function submitCreateGroup() {
+  const name = document.getElementById('cg-name').value.trim();
+  if (!name) return;
+
+  const newGroup = { name, icon: selectedIcon, color: selectedColor };
+  try {
+    const saved = await apiFetch('/groups/', 'POST', newGroup);
+    groups.push({ ...saved, todos: [], showInput: false });
+  } catch {
+    // API 없으면 로컬 fallback
+    groups.push({ id: Date.now(), ...newGroup, todos: [], showInput: false });
+  }
+  document.getElementById('cg-name').value = '';
+  switchView('main-view');
+  renderMainList();
+}
+
+function openEditHabit(id) {
+  const g = groups.find(x => x.id === id);
+  currentEditHabitId = id;
+  document.getElementById('eg-name').value = g.name;
+  editIcon = g.icon; editColor = g.color;
+  renderPickers('eg-icon-picker', 'eg-color-picker', true);
+  switchView('edit-group-view');
+}
+
+async function submitEditGroup() {
+  const g = groups.find(x => x.id === currentEditHabitId);
+  const updates = { name: document.getElementById('eg-name').value, icon: editIcon, color: editColor };
+  try { await apiFetch(`/groups/${g.id}/`, 'PATCH', updates); } catch {}
+  Object.assign(g, updates);
+  switchView('main-view');
+  renderMainList();
+  renderCalendar();
+}
+
+function confirmDelete(id) {
+  habitToDelete = id;
+  document.getElementById('delete-modal').classList.remove('hidden');
+}
+
+async function executeDeleteGroup() {
+  try { await apiFetch(`/groups/${habitToDelete}/`, 'DELETE'); } catch {}
+  groups = groups.filter(x => x.id !== habitToDelete);
+  renderMainList(); renderCalendar();
+  closeModal('delete-modal');
+}
+
+// ════════════════════════════════════
+//  할 일 CRUD
+// ════════════════════════════════════
+function toggleInput(id) {
+  const g = groups.find(x => x.id === id);
+  g.showInput = !g.showInput;
+  renderMainList();
+  if (g.showInput) setTimeout(() => document.getElementById('input-' + id)?.focus(), 50);
+}
+
+function handleInputBlur(gid) {
+  setTimeout(() => {
+    const input = document.getElementById('input-' + gid);
+    if (input && input.value.trim() === '') {
+      groups.find(x => x.id === gid).showInput = false;
+      renderMainList();
+    }
+  }, 150);
+}
+
+async function addTodo(e, gid) {
+  if (e.key !== 'Enter') return;
+  const text = e.target.value.trim();
+  if (!text) return;
+  const newTodo = { text, done: false, memo: '' };
+  try {
+    const saved = await apiFetch(`/groups/${gid}/todos/`, 'POST', newTodo);
+    groups.find(x => x.id === gid).todos.push(saved);
+  } catch {
+    groups.find(x => x.id === gid).todos.push({ id: Date.now(), ...newTodo });
+  }
+  e.target.value = '';
+  renderMainList();
+  renderCalendar();
+  setTimeout(() => document.getElementById('input-' + gid)?.focus(), 50);
+}
+
+async function toggleTodo(gid, tid) {
+  const t = groups.find(x => x.id === gid).todos.find(x => x.id === tid);
+  t.done = !t.done;
+  try { await apiFetch(`/todos/${tid}/`, 'PATCH', { done: t.done }); } catch {}
+  renderMainList(); renderCalendar();
+}
+
+async function deleteTodo(gid, tid) {
+  try { await apiFetch(`/todos/${tid}/`, 'DELETE'); } catch {}
+  groups.find(x => x.id === gid).todos = groups.find(x => x.id === gid).todos.filter(x => x.id !== tid);
+  renderMainList(); renderCalendar();
+}
+
+// ════════════════════════════════════
+//  할 일 상세
+// ════════════════════════════════════
+function openTaskDetail(gid, tid) {
+  currentEditTaskIds = { gid, tid };
+  const g = groups.find(x => x.id === gid);
+  const t = g.todos.find(x => x.id === tid);
+  document.getElementById('td-group-name').innerText = g.name;
+  document.getElementById('td-title').innerText = t.text;
+  document.getElementById('td-memo').value = t.memo || '';
+  switchView('task-detail-view');
+}
+
+async function saveTaskMemo() {
+  const { gid, tid } = currentEditTaskIds;
+  const memo = document.getElementById('td-memo').value;
+  const t = groups.find(x => x.id === gid).todos.find(x => x.id === tid);
+  t.memo = memo;
+  try { await apiFetch(`/todos/${tid}/`, 'PATCH', { memo }); } catch {}
+  switchView('main-view');
+}
+
+// ════════════════════════════════════
+//  프로필
+// ════════════════════════════════════
+function openProfileModal(type) {
+  currentProfileType = type;
+  const val = type === 'name'
+    ? document.getElementById('main-profile-name').innerText
+    : document.getElementById('main-profile-bio').innerText;
+  document.getElementById('profile-edit-input').value = val;
+  document.getElementById('profile-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('profile-edit-input').focus(), 50);
+}
+
+function saveProfile() {
+  const val = document.getElementById('profile-edit-input').value.trim();
+  if (currentProfileType === 'name' && val) {
+	const display = val || '이름을 입력하세요';
+	document.getElementById('main-profile-name').innerText = val;
+    document.getElementById('p-name-val').innerText = val;
+  } else if (currentProfileType === 'bio') {
+	const display = val || '자기소개를 입력하세요';
+    document.getElementById('main-profile-bio').innerText = val || '';
+    document.getElementById('p-bio-val').innerText = val || '';
+  }
+  closeModal('profile-modal');
+}
+
+// ════════════════════════════════════
+//  피커
+// ════════════════════════════════════
+function renderPickers(iconContId, colorContId, isEdit) {
+  const iCont = document.getElementById(iconContId);
+  const cCont = document.getElementById(colorContId);
+  const curIcon  = isEdit ? editIcon  : selectedIcon;
+  const curColor = isEdit ? editColor : selectedColor;
+
+  iCont.innerHTML = icons.map(i => `
+    <div class="icon-btn ${curIcon === i ? 'selected' : ''}"
+         onclick="${isEdit ? 'editIcon' : 'selectedIcon'}='${i}'; renderPickers('${iconContId}','${colorContId}',${isEdit})">${i}</div>
+  `).join('');
+
+  cCont.innerHTML = colors.map(c => `
+    <div class="color-btn ${curColor === c ? 'selected' : ''}"
+         style="background:${c}"
+         onclick="${isEdit ? 'editColor' : 'selectedColor'}='${c}'; renderPickers('${iconContId}','${colorContId}',${isEdit})"></div>
+  `).join('');
+}
+
+// ════════════════════════════════════
+//  달력
+// ════════════════════════════════════
+function renderCalendar() {
+  document.getElementById('cal-title').innerText = `${curY}년 ${curM + 1}월`;
+  const daysEl   = document.getElementById('cal-days');
+  const first    = new Date(curY, curM, 1).getDay();
+  const offset   = (first + 6) % 7;
+  const daysNum  = new Date(curY, curM + 1, 0).getDate();
+
+  let cells = [];
+  for (let i = 0; i < offset; i++) cells.push({ empty: true });
+  for (let d = 1; d <= daysNum; d++) cells.push({ day: d });
+  while (cells.length % 7 !== 0) cells.push({ empty: true });
+
+  const doneColors = [...new Set(
+    groups.flatMap(g => g.todos.some(t => t.done) ? [g.color] : [])
+  )];
+  const stampBg = doneColors.length === 0
+    ? 'rgba(0,0,0,0.08)'
+    : doneColors.length === 1
+      ? doneColors[0]
+      : `linear-gradient(135deg, ${doneColors.join(',')})`;
+
+  daysEl.innerHTML = cells.map((c, i) => {
+    if (c.empty) return `<div class="cal-day empty"></div>`;
+    const col     = i % 7;
+    const isToday = curY === now.getFullYear() && curM === now.getMonth() && c.day === now.getDate();
+    const cls     = ['cal-day', col === 5 ? 'sat' : col === 6 ? 'sun' : ''].filter(Boolean).join(' ');
+    return `
+      <div class="${cls}">
+        <div class="day-stamp-wrapper">
+          <div class="clover-fill" style="background:${isToday ? stampBg : 'rgba(0,0,0,0.08)'}"></div>
+        </div>
+        <div class="day-num-wrapper ${isToday ? 'today' : ''}">
+          <span class="day-num">${c.day}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+document.getElementById('prev-month').onclick = () => { if (--curM < 0)  { curM = 11; curY--; } renderCalendar(); };
+document.getElementById('next-month').onclick = () => { if (++curM > 11) { curM = 0;  curY++; } renderCalendar(); };
+
+// ════════════════════════════════════
+//  초기화
+// ════════════════════════════════════
+renderPickers('icon-picker', 'color-picker', false);
+loadAll();
+</script>
+</body>
+</html>
